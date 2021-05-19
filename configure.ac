@@ -14,7 +14,7 @@ dnl DETECT_ICC ([ACTION-IF-YES], [ACTION-IF-NO])
 dnl
 dnl check if this is the Intel ICC compiler, and if so run the ACTION-IF-YES
 dnl sets the $ICC variable to "yes" or "no"
-dnl **********************************************************************
+dnl **********************************************************************-
 AC_DEFUN([DETECT_ICC],
 [
     ICC="no"

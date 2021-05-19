@@ -604,6 +604,8 @@ static void conn_io_queue_complete(conn *c) {
     }
 }
 
+
+// 函数内部执行了 libevent 相关的配置
 conn *conn_new(const int sfd, enum conn_states init_state,
                 const int event_flags,
                 const int read_buffer_size, enum network_transport transport,
@@ -760,7 +762,7 @@ conn *conn_new(const int sfd, enum conn_states init_state,
         }
     }
 
-    event_set(&c->event, sfd, event_flags, event_handler, (void *)c);
+    event_set(&c->event, sfd, event_flags, event_handler, (void *)c); // event_handler 回调函数
     event_base_set(base, &c->event);
     c->ev_flags = event_flags;
 
@@ -2376,6 +2378,7 @@ static enum try_read_result try_read_network(conn *c) {
     return gotdata;
 }
 
+// 修改事件的监听内容
 static bool update_event(conn *c, const int new_flags) {
     assert(c != NULL);
 
@@ -2841,6 +2844,8 @@ static int read_into_chunked_item(conn *c) {
     return total;
 }
 
+// 核心函数
+// 状态机
 static void drive_machine(conn *c) {
     bool stop = false;
     int sfd;
@@ -2857,10 +2862,11 @@ static void drive_machine(conn *c) {
 
     assert(c != NULL);
 
-    while (!stop) {
+    while (!stop) { // 状态机循环，stop作为结束条件
 
         switch(c->state) {
         case conn_listening:
+            // 主线程
             addrlen = sizeof(addr);
 #ifdef HAVE_ACCEPT4
             if (use_accept4) {
@@ -2958,9 +2964,9 @@ static void drive_machine(conn *c) {
                 }
                 ssl_v = (void*) ssl;
 #endif
-
+                // 状态转成 conn_new_cmd
                 dispatch_conn_new(sfd, conn_new_cmd, EV_READ | EV_PERSIST,
-                                     READ_BUFFER_CACHED, c->transport, ssl_v);
+                                     READ_BUFFER_CACHED, c->transport, ssl_v); // master 在这里分发
             }
 
             stop = true;
@@ -2974,7 +2980,7 @@ static void drive_machine(conn *c) {
                 conn_set_state(c, conn_closing);
                 break;
             }
-
+            // 状态更改成 conn_read
             conn_set_state(c, conn_read);
             stop = true;
             break;
@@ -3272,6 +3278,8 @@ static void drive_machine(conn *c) {
     return;
 }
 
+
+// 回调函数
 void event_handler(const evutil_socket_t fd, const short which, void *arg) {
     conn *c;
 
@@ -3352,6 +3360,7 @@ static void maximize_sndbuf(const int sfd) {
 
 /**
  * Create a socket and bind it to a specific port number
+ * 创建一个socker绑定到指定端口
  * @param interface the interface to bind to
  * @param port the port number to bind to
  * @param transport the transport protocol (TCP / UDP)

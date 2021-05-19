@@ -175,7 +175,6 @@ void pause_threads(enum pause_thread_types type) {
     if (buf[0] == 0) {
         return;
     }
-
     pthread_mutex_lock(&init_lock);
     init_count = 0;
     for (i = 0; i < settings.num_threads; i++) {
@@ -359,6 +358,7 @@ static void cqi_free(CQ_ITEM *item) {
 
 /*
  * Creates a worker thread.
+ * 创建工作线程
  */
 static void create_worker(void *(*func)(void *), void *arg) {
     pthread_attr_t  attr;
@@ -385,6 +385,7 @@ void accept_new_conns(const bool do_accept) {
 
 /*
  * Set up a thread's information.
+ * 设置线程
  */
 static void setup_thread(LIBEVENT_THREAD *me) {
 #if defined(LIBEVENT_VERSION_NUMBER) && LIBEVENT_VERSION_NUMBER >= 0x02000101
@@ -394,7 +395,7 @@ static void setup_thread(LIBEVENT_THREAD *me) {
     me->base = event_base_new_with_config(ev_config);
     event_config_free(ev_config);
 #else
-    me->base = event_init();
+    me->base = event_init();  // 事件框架 main loop
 #endif
 
     if (! me->base) {
@@ -404,7 +405,7 @@ static void setup_thread(LIBEVENT_THREAD *me) {
 
     /* Listen for notifications from other threads */
     event_set(&me->notify_event, me->notify_receive_fd,
-              EV_READ | EV_PERSIST, thread_libevent_process, me);
+              EV_READ | EV_PERSIST, thread_libevent_process, me); // 回调函数 thread_libevent_process
     event_base_set(me->base, &me->notify_event);
 
     if (event_add(&me->notify_event, 0) == -1) {
@@ -417,7 +418,7 @@ static void setup_thread(LIBEVENT_THREAD *me) {
         perror("Failed to allocate memory for connection queue");
         exit(EXIT_FAILURE);
     }
-    cq_init(me->new_conn_queue);
+    cq_init(me->new_conn_queue); // 初始化 master 和 worker 线程的通信队列
 
     if (pthread_mutex_init(&me->stats.mutex, NULL) != 0) {
         perror("Failed to initialize mutex");
@@ -459,6 +460,7 @@ static void setup_thread(LIBEVENT_THREAD *me) {
 
 /*
  * Worker thread: main event loop
+ * 工作线程的主循环
  */
 static void *worker_libevent(void *arg) {
     LIBEVENT_THREAD *me = arg;
@@ -478,7 +480,7 @@ static void *worker_libevent(void *arg) {
 
     register_thread_initialized();
 
-    event_base_loop(me->base, 0);
+    event_base_loop(me->base, 0); // 主循环开始工作
 
     // same mechanism used to watch for all threads exiting.
     register_thread_initialized();
@@ -491,6 +493,7 @@ static void *worker_libevent(void *arg) {
 /*
  * Processes an incoming "handle a new connection" item. This is called when
  * input arrives on the libevent wakeup pipe.
+ * 线程接受到main loop分发后的连接进行的处理
  */
 static void thread_libevent_process(evutil_socket_t fd, short which, void *arg) {
     LIBEVENT_THREAD *me = arg;
@@ -514,6 +517,7 @@ static void thread_libevent_process(evutil_socket_t fd, short which, void *arg) 
         }
         switch (item->mode) {
             case queue_new_conn:
+                // 把新连接的 socker 注册到 worker 线程的 libevent 当中
                 c = conn_new(item->sfd, item->init_state, item->event_flags,
                                    item->read_buffer_size, item->transport,
                                    me->base, item->ssl);
@@ -662,6 +666,7 @@ select:
  * Dispatches a new connection to another thread. This is only ever called
  * from the main thread, either during initialization (for UDP) or because
  * of an incoming connection.
+ * 连接分发
  */
 void dispatch_conn_new(int sfd, enum conn_states init_state, int event_flags,
                        int read_buffer_size, enum network_transport transport, void *ssl) {
@@ -676,6 +681,7 @@ void dispatch_conn_new(int sfd, enum conn_states init_state, int event_flags,
 
     LIBEVENT_THREAD *thread;
 
+    // 选择 worker 的算法
     if (!settings.num_napi_ids)
         thread = select_thread_round_robin();
     else
@@ -693,7 +699,7 @@ void dispatch_conn_new(int sfd, enum conn_states init_state, int event_flags,
 
     MEMCACHED_CONN_DISPATCH(sfd, (int64_t)thread->thread_id);
     buf[0] = 'c';
-    if (write(thread->notify_send_fd, buf, 1) != 1) {
+    if (write(thread->notify_send_fd, buf, 1) != 1) { // 管道中写入数据，通知工作线程
         perror("Writing to thread notify pipe");
     }
 }
@@ -931,7 +937,7 @@ void slab_stats_aggregate(struct thread_stats *stats, struct slab_stats *out) {
 
 /*
  * Initializes the thread subsystem, creating various worker threads.
- *
+ *  初始化工作线程
  * nthreads  Number of worker event handler threads to spawn
  */
 void memcached_thread_init(int nthreads, void *arg) {
@@ -1002,7 +1008,7 @@ void memcached_thread_init(int nthreads, void *arg) {
 #ifdef EXTSTORE
         threads[i].storage = arg;
 #endif
-        setup_thread(&threads[i]);
+        setup_thread(&threads[i]);  // 设置线程，包括注册事件及回调
         /* Reserve three fds for the libevent base, and two for the pipe */
         stats_state.reserved_fds += 5;
     }

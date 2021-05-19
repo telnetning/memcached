@@ -13,7 +13,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
-#include <event.h>
+#include <event.h> // 引入 libevent
 #include <netdb.h>
 #include <pthread.h>
 #include <unistd.h>
